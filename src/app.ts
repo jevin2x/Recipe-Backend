@@ -12,7 +12,7 @@ const app = express();
 app.use(helmet());
 // Deployed frontends that must always pass CORS, even when FRONTEND_URL is
 // missing or wrong in the hosting dashboard.
-const builtInOrigins = ["https://recipi-frontend-eta.vercel.app"];
+const builtInOrigins = ["https://recipi-frontend-lake.vercel.app/"];
 // FRONTEND_URL may list several exact origins, comma separated, so a deployed
 // frontend (Vercel, Netlify, ...) and localhost can be allowed together.
 const allowedOrigins = [
