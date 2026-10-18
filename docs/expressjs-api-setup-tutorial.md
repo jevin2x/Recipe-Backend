@@ -291,4 +291,4 @@ See `DEPLOYMENT-GUIDE.md` for additional deployment instructions. If your reposi
 - Restrict CORS to trusted frontend origins.
 - Keep authentication cookies HttpOnly and configure production cookie security correctly.
 - Use CSRF protection for applicable browser requests.
-- Enforce authentication and ownership checks on protected recipe endpoints.
+- Enforce authentication and ownership checks on protected recipe endpoint
