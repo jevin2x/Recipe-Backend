@@ -1,354 +1,294 @@
-# Express.js API Setup Tutorial
+# Recipe Book API (Backend)
 
-This guide explains how to create the TypeScript and Express API starter used in this project. At the end, you will have a development server running on port `7000`, environment-based configuration, basic security middleware, a health-check endpoint, and a folder structure ready for larger features.
+A TypeScript + Express 5 REST API for the Full-Stack Recipe Book application. It handles authentication, recipe management, database operations, and communication with the React + Vite frontend.
 
-## Before you begin
+Authentication uses JWT access and refresh tokens stored in **HttpOnly cookies**, refresh-token rotation, and CSRF protection for browser requests. Data is stored in PostgreSQL using **Drizzle ORM**.
 
-Install a current Node.js LTS release, at least Node.js v24+. Verify that Node.js and npm are available:
+**Production API:** [https://recipe-backend-api-68ju.onrender.com](https://recipe-backend-api-68ju.onrender.com)
 
-```bash
-node --version
-npm --version
-```
+**Frontend:** [https://recipi-frontend-eta.vercel.app](https://recipi-frontend-eta.vercel.app)
 
-You will also need a code editor such as Visual Studio Code. PostgreSQL is only required once you begin using the database features.
+## Stack
 
-## 1. Create the project
+| **Layer** | **Choice** |
+|---|---|
+| Runtime | Node.js 22+ |
+| Language | TypeScript |
+| Server | Express 5 |
+| Database | PostgreSQL (Neon in production) |
+| ORM / Migrations | Drizzle ORM + Drizzle Kit |
+| Authentication | `jsonwebtoken` + `bcrypt` + HttpOnly cookies |
+| CSRF Protection | `csrf-csrf` |
+| Validation | Zod |
+| Production Build | `tsdown` |
+| Development | `tsx` |
+| Deployment | Render |
 
-Create and open a new folder. This example uses `D:\Development\appsdev-api-tutorial`:
+## Architecture
 
-```bash
-mkdir appsdev-api-tutorial
-cd appsdev-api-tutorial
-npm init -y
-```
-
-Open this folder in your editor, then open its integrated terminal.
-
-## 2. Install dependencies
-
-Install the packages used by the API:
-
-```bash
-npm install cookie-parser cors dotenv express helmet hpp jsonwebtoken nodemailer zod csrf-csrf bcrypt
-```
-
-Install the TypeScript, build, linting, and type-definition packages:
-
-```bash
-npm install -D jiti @eslint/js @types/cookie-parser @types/cors @types/express @types/hpp @types/jsonwebtoken @types/node @types/nodemailer @typescript-eslint/eslint-plugin @typescript-eslint/parser eslint tsdown tsx typescript typescript-eslint @types/bcrypt
-```
-
-## 3. Configure TypeScript and ESLint
-
-This project uses `eslint.config.ts`, a TypeScript configuration file. ESLint needs the `jiti` development dependency from section 2 to load it. If you already installed the other packages but missed `jiti`, run:
-
-```bash
-npm install -D jiti
-```
-
-Without it, `npm run lint` stops with **The 'jiti' library is required for loading TypeScript configuration files**. After installing it, run `npm run lint` again.
-
-Copy [tsconfig.json](../tsconfig.json) and [eslint.config.ts](../eslint.config.ts) into the project root. The TypeScript configuration defines the `@/` import alias, so this import:
-
-```ts
-import app from "@/app";
-```
-
-means `src/app.ts`.
-
-Add these scripts to the `scripts` section of [package.json](../package.json):
-
-```json
-"scripts": {
-  "build": "tsdown src/server.ts --format esm --clean --minify",
-  "dev": "tsx watch src/server.ts",
-  "start": "node dist/server.mjs",
-  "db:studio": "drizzle-kit studio",
-  "db:plan": "drizzle-kit generate",
-  "db:migrate": "drizzle-kit migrate",
-  "lint": "eslint ."
-},
-```
-
-Use `npm run dev` while developing. It restarts the server when you save a TypeScript file. Use `npm run build` followed by `npm start` to test the production build.
-
-## 4. Create the source structure
-
-Create the following folders inside `src`:
+Requests flow through separate layers:
 
 ```text
-src/
-├── config/        # Environment configuration
-├── controllers/   # Request handlers
-├── db/            # Drizzle schema and database connection
-├── lib/           # Shared integrations and helpers
-├── middlewares/   # Express middleware
-├── repositories/  # Database access
-├── routes/        # Route definitions
-├── schema/        # Validation schemas
-├── services/      # Application business logic
-└── utils/         # Small reusable utilities
+Routes
+  ↓
+Controllers
+  ↓
+Services
+  ↓
+Repositories
+  ↓
+Drizzle ORM
+  ↓
+PostgreSQL (Neon)
 ```
 
-For the complete project, also copy its feature files under controllers, routes, services, repositories, schema, middlewares, and lib; app.ts imports those routes. The complete API requires the database setup in section 8 before startup. For a database-free health-check lesson, omit the feature route import and registration until section 8.
+- `src/routes` defines API endpoints and attaches middleware.
+- `src/controllers` handles HTTP requests and responses.
+- `src/services` contains business rules and permission checks.
+- `src/repositories` contains database queries and ownership filters.
+- `src/db/schema.ts` defines the database structure.
 
-Then copy [src/app.ts](../src/app.ts) and [src/server.ts](../src/server.ts) into their matching locations. Git does not store empty folders, so add a `.gitkeep` file to any folder that is intentionally empty for now.
+**Database workflow:** Update `src/db/schema.ts`, generate migrations, and apply them using the Drizzle migration commands. Avoid changing database tables manually.
 
-## 5. Add environment variables
+## Local Setup
 
-Copy [.env.example](../.env.example) to `.env` in the project root. Do not commit `.env`, because it may later contain real credentials.
+### 1. Clone the repository
+
+```bash
+git clone YOUR_BACKEND_REPOSITORY_URL
+cd YOUR_BACKEND_FOLDER
+```
+
+### 2. Install dependencies
+
+```bash
+npm install
+```
+
+### 3. Create your environment file
+
+PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+macOS / Linux:
+
+```bash
+cp .env.example .env
+```
+
+### 4. Configure environment variables
+
+Set the required values in `.env`, especially `DATABASE_URL`.
 
 ```env
 APP_NAME=AppsDev API Tutorial
 PORT=7000
 NODE_ENV=development
-JWT_SECRET=fallback_secret_change_me
+JWT_SECRET=your_jwt_secret
+CSRF_SECRET=your_different_csrf_secret
 BACKEND_URL=http://localhost:7000
 FRONTEND_URL=http://localhost:5173
-CSRF_SECRET=replace_with_a_separate_random_secret
-DATABASE_URL=
+DATABASE_URL=your_postgresql_connection_string
 ```
 
-Copy [src/config/env.ts](../src/config/env.ts); it loads these variables and provides defaults for local development. Before deployment, replace `JWT_SECRET` with a strong, private value and set all URLs to the deployed services.
+Use your actual PostgreSQL connection string and generate secure secrets. Do not commit `.env` to GitHub.
 
-## 6. Build the Express application
-
-[src/app.ts](../src/app.ts) creates the Express application and configures its middleware:
-
-- `helmet` adds common HTTP security headers.
-- `cors` allows the configured frontend origin to call the API with cookies.
-- `express.json()` and `express.urlencoded()` parse request bodies.
-- `cookie-parser` reads cookies from incoming requests.
-- `hpp` helps protect against HTTP parameter pollution.
-
-Keep endpoint handlers above the 404 middleware. Express evaluates middleware in registration order. If the 404 handler is registered first, it will respond before a later route such as `/api/health` can run.
-
-The starter provides these endpoints:
-
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/` | Confirms that the application instance is running. |
-| `GET` | `/api/health` | Confirms that the API route layer is running. |
-
-Each endpoint returns JSON with a success status and timestamp.
-
-## 7. Start and verify the API
-
-For the complete API, finish section 8 and configure DATABASE_URL first. Then run the development server:
-
-```bash
-npm run dev
-```
-
-You should see the API URL and environment in the terminal. Test the API with Postman:
-
-1. Open Postman and select **New** → **HTTP Request**.
-2. Set the method to `GET`.
-3. Enter `http://localhost:7000/api/health` as the request URL.
-4. Select **Send**.
-
-Postman should show a `200 OK` response with this JSON body:
-
-Expected response:
-
-```json
-{
-  "status": "success",
-  "message": "API is healthy",
-  "timestamp": "2026-09-18T00:00:00.000Z"
-}
-```
-
-The timestamp will be different on your machine. If you receive `Cannot GET /api/health`, check that the route is defined before the 404 handler in [src/app.ts](../src/app.ts), then restart the development server.
-
-## 8. Add Drizzle ORM and PostgreSQL
-
-Drizzle ORM builds typed SQL queries in your application. The `pg` package connects to PostgreSQL through a connection pool. Drizzle Kit is the command-line tool that generates and applies SQL migrations. Read the [official PostgreSQL setup guide](https://orm.drizzle.team/docs/get-started/postgresql-new) alongside this section.
-
-### 8.1 Install the database packages
-
-```bash
-npm install drizzle-orm@latest pg@latest
-npm install -D drizzle-kit@latest @types/pg@latest
-```
-
-`@latest` selects the current stable npm release when students install. Commit `package-lock.json` so classmates can reproduce the resolved versions using `npm ci`.
-
-Create an empty PostgreSQL database locally or through your database provider. Put its connection string in `.env`:
-
-```env
-DATABASE_URL=postgresql://username:password@localhost:5432/recipe_book
-```
-
-Replace the placeholders with your own values. For hosted databases, use the provider's connection string and required SSL settings. Do not put credentials directly into TypeScript or commit them to Git.
-
-### 8.2 Define your database tables
-
-Copy [src/db/schema.ts](../src/db/schema.ts). This file defines this project's `user`, `recipe`, and `token` tables, their columns, indexes, enum values, and foreign keys. It is different from `src/schema/`: those Zod schemas validate incoming HTTP data, while `src/db/schema.ts` describes database storage.
-
-This simplified example illustrates the syntax; the linked project file contains the complete schema:
-
-```ts
-import { pgTable, uuid, text } from "drizzle-orm/pg-core";
-
-export const users = pgTable("user", {
-  id: uuid().defaultRandom().primaryKey(),
-  email: text().unique(),
-  name: text(),
-});
-```
-
-`pgTable` names a SQL table. `uuid`, `text`, and `integer` describe column types. `.notNull()`, `.unique()`, and `.references()` describe constraints. Read [PostgreSQL column types](https://orm.drizzle.team/docs/column-types/pg) and [indexes and constraints](https://orm.drizzle.team/docs/indexes-constraints) when adding fields or relationships.
-
-### 8.3 Configure migration generation
-
-Copy [drizzle.config.ts](../drizzle.config.ts) into the project root:
-
-```ts
-import "dotenv/config";
-import { defineConfig } from "drizzle-kit";
-
-export default defineConfig({
-  dialect: "postgresql",
-  schema: "./src/db/schema.ts",
-  out: "./drizzle",
-  dbCredentials: process.env.DATABASE_URL
-    ? { url: process.env.DATABASE_URL }
-    : undefined,
-  strict: true,
-  verbose: true,
-});
-```
-
-`schema` tells the CLI where to read table definitions; `out` is where it writes SQL and migration metadata. `dbCredentials` supplies the connection when applying migrations. See the [Drizzle configuration reference](https://orm.drizzle.team/docs/drizzle-config-file).
-
-### 8.4 Create the runtime connection
-
-Copy [src/db/index.ts](../src/db/index.ts). Repositories import this shared connection:
-
-```ts
-import { drizzle } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
-import { ENV } from "@/config/env";
-import * as schema from "./schema";
-
-if (!ENV.DATABASE_URL) throw new Error("DATABASE_URL is required");
-
-export const pool = new Pool({ connectionString: ENV.DATABASE_URL });
-export const db = drizzle({ client: pool, schema });
-```
-
-A pool reuses database connections. Create it once for the application rather than inside every controller or request. The API needs a valid DATABASE_URL at startup because its repositories import this module.
-
-### 8.5 Generate, review, and apply migrations
-
-```bash
-npm run db:plan
-```
-
-This runs `drizzle-kit generate`: it compares your TypeScript schema with the saved migration snapshots and writes SQL into `drizzle/`. It does not apply SQL to the database. The project already includes an initial migration; generating without schema changes may report that no changes are needed.
-
-Open and review the generated `.sql` file. When you are ready to create or update your database tables, run:
+### 5. Create database tables
 
 ```bash
 npm run db:migrate
 ```
 
-This runs `drizzle-kit migrate` against DATABASE_URL. It applies pending migrations and records their application. Commit the entire `drizzle/` folder, including SQL, snapshots, and the journal. Keep these files when adding later migrations.
+### 6. Seed sample data (optional)
 
-For each future database change: edit `src/db/schema.ts`, generate a migration, review the SQL, and apply it. No client-generation command is required. See the [migration workflow](https://orm.drizzle.team/docs/migrations), [generate command](https://orm.drizzle.team/docs/drizzle-kit-generate), and [migrate command](https://orm.drizzle.team/docs/drizzle-kit-migrate).
+```bash
+npm run db:seed
+```
 
-To browse the configured database during development:
+### 7. Start the development server
+
+```bash
+npm run dev
+```
+
+The API will normally run at [http://localhost:7000](http://localhost:7000).
+
+Check the health endpoint:
+
+```http
+GET http://localhost:7000/api/health
+```
+
+A successful response should look like:
+
+```json
+{
+  "status": "success"
+}
+```
+
+## Environment Variables
+
+| **Variable** | **Purpose** |
+|---|---|
+| `APP_NAME` | Application name used in logs and the root route. |
+| `PORT` | Port used by the server. Render provides its own port. |
+| `NODE_ENV` | Controls development or production behavior. |
+| `JWT_SECRET` | Secret used to sign JWT access and refresh tokens. |
+| `CSRF_SECRET` | Separate secret used for CSRF protection. |
+| `BACKEND_URL` | Public URL of the deployed API. |
+| `FRONTEND_URL` | Exact frontend origin allowed by CORS. |
+| `DATABASE_URL` | PostgreSQL connection string. |
+
+Generate a secure secret with Node.js:
+
+```bash
+node -e "console.log(require('node:crypto').randomBytes(48).toString('hex'))"
+```
+
+Run it separately for `JWT_SECRET` and `CSRF_SECRET` so they have different values.
+
+## Database Workflow (Drizzle)
+
+Generate migrations from schema changes:
+
+```bash
+npm run db:plan
+```
+
+Apply pending migrations:
+
+```bash
+npm run db:migrate
+```
+
+Open Drizzle Studio:
 
 ```bash
 npm run db:studio
 ```
 
-Studio can change database data. Use your development database for classroom exercises.
+Seed sample records:
 
-### 8.6 Write queries in repositories
-
-Use the existing [user repository](../src/repositories/user-repository.ts), [recipe repository](../src/repositories/recipe-repository.ts), and [token repository](../src/repositories/token-repository.ts) as project examples. HTTP routes call controllers, controllers call services, and services call repositories. Keep database queries in repositories.
-
-These examples use the complete project's schema and belong inside async repository methods. `userId` is an existing user's UUID and `ownerId` comes from the authenticated session:
-
-```ts
-import { and, eq } from "drizzle-orm";
-import { db } from "@/db";
-import { users, recipes } from "@/db/schema";
-
-// Read selected public fields, excluding the password.
-const [user] = await db
-  .select({ id: users.id, name: users.name, email: users.email })
-  .from(users)
-  .where(eq(users.id, userId))
-  .limit(1);
-
-// Create a row and return selected fields.
-const [createdUser] = await db
-  .insert(users)
-  .values({ name: "Student", email: "student@example.com" })
-  .returning({ id: users.id, name: users.name });
-
-// Limit updates and deletions to a recipe owned by the caller.
-const [updatedRecipe] = await db
-  .update(recipes)
-  .set({ name: "Vegetable Soup" })
-  .where(and(eq(recipes.id, recipeId), eq(recipes.userId, ownerId)))
-  .returning();
-
-const [deletedRecipe] = await db
-  .delete(recipes)
-  .where(and(eq(recipes.id, recipeId), eq(recipes.userId, ownerId)))
-  .returning();
+```bash
+npm run db:seed
 ```
 
-The insert above demonstrates query syntax only. Provision real accounts through the seed script (`npm run db:seed`) or a trusted admin workflow so password hashing runs. Never store a plain password.
+Migration files are stored in `drizzle/` and should be committed to Git.
 
-Query results are arrays. Destructuring `[user]` selects the first row, which can be `undefined` when no record matches. `.returning()` returns the affected rows on PostgreSQL. Always add an appropriate `.where()` to update/delete queries; without it, all rows can be affected. Keep ownership checks in database filters as shown.
+## API Endpoints
 
-Use these official references when adding queries:
+**Base URL:** `https://recipe-backend-api-68ju.onrender.com/api`
 
-| What you want to add | Documentation |
-| --- | --- |
-| Read rows, choose columns, sort, paginate | [Select](https://orm.drizzle.team/docs/select) |
-| Create rows and return inserted values | [Insert](https://orm.drizzle.team/docs/insert) |
-| Change matching rows | [Update](https://orm.drizzle.team/docs/update) |
-| Remove matching rows | [Delete](https://orm.drizzle.team/docs/delete) |
-| Filter with `eq`, `and`, `or`, `gt`, `isNull` | [Filter operators](https://orm.drizzle.team/docs/operators) |
-| Combine related tables | [Joins](https://orm.drizzle.team/docs/joins) |
-| Make several writes succeed or fail together | [Transactions](https://orm.drizzle.team/docs/transactions) |
+| **Method** | **Endpoint** | **Access** | **Purpose** |
+|---|---|---|---|
+| GET | `/health` | Public | Check API status. |
+| GET | `/auth/v1/csrf-token` | Public | Retrieve a CSRF token. |
+| POST | `/auth/v1/signup` | Public | Register a user. |
+| POST | `/auth/v1/login` | Public | Sign in and set authentication cookies. |
+| POST | `/auth/v1/refresh-token` | Cookie | Refresh and rotate tokens. |
+| POST | `/auth/v1/logout` | Cookie | Log out and revoke the refresh token. |
+| GET | `/auth/v1/session` | Authenticated | Retrieve the current user. |
+| GET | `/recipes/v1/get-recipes` | USER | Retrieve the user's own recipes. |
+| GET | `/recipes/v1/get-recipe/:id` | USER | Retrieve an owned recipe. |
+| POST | `/recipes/v1/create-recipe` | USER | Create a recipe. |
+| POST | `/recipes/v1/update-recipe/:id` | USER | Update an owned recipe. |
+| POST | `/recipes/v1/delete-recipe/:id` | USER | Delete an owned recipe. |
+| GET | `/recipes/v1/get-all-recipes` | ADMIN | Retrieve all recipes and their owners. |
 
-### 8.7 Add a feature through the application layers
+Recipe routes require valid authentication. Browser requests that modify data must include the required CSRF token.
 
-For a new database-backed feature:
+## Authentication and Security
 
-1. Add its table or columns in `src/db/schema.ts` and follow the migration workflow above.
-2. Add a Zod request schema in `src/schema/` to validate incoming values.
-3. Add database methods in `src/repositories/` using the query references above.
-4. Add business rules and permission checks in `src/services/`.
-5. Add a handler in `src/controllers/`, then register its endpoint in `src/routes/` and mount the router in [src/routes/index.ts](../src/routes/index.ts).
-6. Exercise the endpoint with Postman and check both successful requests and invalid or unauthorized requests.
+1. The frontend requests a CSRF token.
+2. The user submits login credentials.
+3. The backend validates the credentials and sets authentication cookies.
+4. The refresh endpoint rotates refresh tokens when required.
+5. Protected endpoints verify authentication and user permissions.
+6. CSRF protection validates applicable browser requests.
 
-See [recipes-api.md](recipes-api.md) for recipe endpoints and ownership rules, and [csrf-auth.md](csrf-auth.md) for browser cookies, CSRF headers, and token rotation. Browser clients must send cookies and follow that CSRF flow for protected writes.
+Access and refresh tokens are stored in HttpOnly cookies, preventing client-side JavaScript from reading their values directly.
 
-### 8.8 Troubleshooting
+## Production Build
 
-- **DATABASE_URL is required:** create `.env` in the project root and set the connection string.
-- **Connection refused or authentication failed:** check that PostgreSQL is reachable and the database, username, password, and SSL settings match your provider.
-- **Table or relation does not exist:** confirm DATABASE_URL points to the intended database and apply its pending migrations.
-- **No schema changes detected:** the schema matches the stored snapshots; this does not prove the database has already been migrated.
-- **Missing module or type definitions:** run `npm install` in the API project directory and confirm the packages from section 8.1 are installed.
+Build the application:
 
-## 9. Check your work and commit it
+```bash
+npm run build
+```
 
-Run the linter before committing:
+Start the production server:
+
+```bash
+npm start
+```
+
+Run ESLint:
 
 ```bash
 npm run lint
 ```
 
-When it passes, initialize a Git repository if needed, copy [.gitignore](../.gitignore) so it excludes `.env`, `node_modules`, and `dist`, then create your remote repository and push the project.
+The production build outputs `dist/server.mjs`.
 
-From here, add features in layers: define routes, validate input in schemas, put business rules in services, and keep direct database queries in repositories.
+## Deploy to Render
+
+1. Push the backend repository to GitHub.
+2. Create a Web Service in [Render](https://dashboard.render.com/).
+3. Connect your backend repository.
+4. Configure the build and start commands.
+
+**Build command:**
+
+```bash
+npm ci --include=dev && npm run db:migrate && npm run build
+```
+
+**Start command:**
+
+```bash
+npm start
+```
+
+5. Configure the environment variables in Render.
+
+### Production Environment
+
+Set these values in your Render service, using your own secure secrets and database credentials.
+
+```env
+APP_NAME=AppsDev API Tutorial
+NODE_ENV=production
+BACKEND_URL=https://recipe-backend-api-68ju.onrender.com
+FRONTEND_URL=https://recipi-frontend-eta.vercel.app
+DATABASE_URL=your_neon_postgresql_connection_string
+JWT_SECRET=your_secure_jwt_secret
+CSRF_SECRET=your_different_secure_csrf_secret
+```
+
+Do not hardcode `PORT` unless your application requires it; your server should use the port provided by Render.
+
+**Important:** `FRONTEND_URL` must match your deployed frontend's origin exactly. Use `https://recipi-frontend-eta.vercel.app`, not your Vercel dashboard URL.
+
+See `DEPLOYMENT-GUIDE.md` for additional deployment instructions. If your repository includes `render.yaml`, review its settings before using the Blueprint deployment option.
+
+## Deployment URLs
+
+| **Service** | **URL** |
+|---|---|
+| Frontend | https://recipi-frontend-eta.vercel.app |
+| Backend API | https://recipe-backend-api-68ju.onrender.com |
+| Health Check | https://recipe-backend-api-68ju.onrender.com/api/health |
+| Database | Neon PostgreSQL |
+
+## Security Notes
+
+- Never commit `.env` files or expose database credentials.
+- Use separate, randomly generated JWT and CSRF secrets.
+- Restrict CORS to trusted frontend origins.
+- Keep authentication cookies HttpOnly and configure production cookie security correctly.
+- Use CSRF protection for applicable browser requests.
+- Enforce authentication and ownership checks on protected recipe endpoints.
