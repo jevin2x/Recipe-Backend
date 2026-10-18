@@ -10,8 +10,11 @@ const app = express();
 
 // --- Core Middleware ---
 app.use(helmet());
+// FRONTEND_URL may list several exact origins, comma separated, so a deployed
+// frontend (Vercel, Netlify, ...) and localhost can be allowed together.
+const allowedOrigins = ENV.FRONTEND_URL.split(",").map((origin) => origin.trim()).filter(Boolean);
 app.use(cors({
-  origin: ENV.FRONTEND_URL,
+  origin: allowedOrigins,
   credentials: true
 }));
 
